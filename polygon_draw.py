@@ -1,6 +1,7 @@
 import pygame
 import sys
 from typing import List, Tuple
+from polygon_point_pip import is_point_in_concave_polygon
 
 WIDTH, HEIGHT = 1000, 700
 BG_COLOR = (30, 30, 30)
@@ -13,6 +14,38 @@ def draw_text(surface, text, pos, color=(220, 220, 220), font_size=18):
     font = pygame.font.SysFont(None, font_size)
     img = font.render(text, True, color)
     surface.blit(img, pos)
+
+
+def draw_filled_polygon_by_sampling(surface, polygon: List[Tuple[int, int]], color: Tuple[int, int, int], sample_step: int = 1) -> None:
+    """Fill a polygon by testing each point in its bounding box with a PIP test.
+
+    This is intentionally simple and brute-force: it iterates over the integer
+    coordinates inside the polygon's bounding box and sets pixels where the
+    provided point-in-polygon test returns True.
+
+    Args:
+        surface: Pygame surface to draw onto.
+        polygon: list of (x, y) vertex tuples.
+        color: RGB color tuple.
+        sample_step: step in pixels for sampling (1 = every pixel, >1 = faster/coarser).
+    """
+    if not polygon:
+        return
+
+    xs = [p[0] for p in polygon]
+    ys = [p[1] for p in polygon]
+    min_x = max(min(xs), 0)
+    max_x = max(min(max(xs), surface.get_width() - 1), min_x)
+    min_y = max(min(ys), 0)
+    max_y = max(min(max(ys), surface.get_height() - 1), min_y)
+
+    # Access pixel-setting once per surface for speed
+    set_at = surface.set_at
+
+    for y in range(min_y, max_y + 1, sample_step):
+        for x in range(min_x, max_x + 1, sample_step):
+            if is_point_in_concave_polygon((x, y), polygon):
+                set_at((x, y), color)
 
 
 def main():
@@ -64,7 +97,10 @@ def main():
         # draw filled polygons
         for poly in polygons:
             if len(poly) >= 3:
-                pygame.draw.polygon(screen, FILL_COLOR, poly)
+                # Use sampling-based fill when polygon area is small-to-medium.
+                # For very large polygons this is slow; sample_step can be
+                # increased to speed up the operation at the cost of quality.
+                draw_filled_polygon_by_sampling(screen, poly, FILL_COLOR, sample_step=1)
                 pygame.draw.polygon(screen, LINE_COLOR, poly, width=2)
 
         # current polygon: lines and points
