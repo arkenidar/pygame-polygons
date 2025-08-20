@@ -1,7 +1,8 @@
 import pygame
 import sys
+import threading
 from typing import List, Tuple
-from polygon_point_pip import is_point_in_concave_polygon, is_point_in_polygon_ray
+from polygon_point_pip import is_point_in_concave_polygon, is_point_in_polygon_ray, trace_concavity_removal
 
 WIDTH, HEIGHT = 1000, 700
 BG_COLOR = (30, 30, 30)
@@ -97,6 +98,11 @@ def main():
     current: List[Tuple[int, int]] = []
 
     running = True
+    debug_trace_mode = False
+    trace_steps = []
+    trace_index = 0
+    trace_thread = None
+    trace_computing = False
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -121,6 +127,30 @@ def main():
                 elif event.key == pygame.K_c:
                     polygons.clear()
                     current.clear()
+                elif event.key == pygame.K_d:
+                    # toggle debug trace mode for the first/default polygon
+                    debug_trace_mode = not debug_trace_mode
+                    trace_steps = []
+                    trace_index = 0
+                    # if enabling, compute trace in background to avoid freeze
+                    if debug_trace_mode and polygons:
+                        def _compute_trace(poly):
+                            nonlocal trace_steps, trace_computing, trace_thread
+                            try:
+                                trace_computing = True
+                                trace_steps = trace_concavity_removal(poly)
+                            finally:
+                                trace_computing = False
+                                trace_thread = None
+
+                        trace_thread = threading.Thread(target=_compute_trace, args=(polygons[0],), daemon=True)
+                        trace_thread.start()
+                elif event.key == pygame.K_LEFT:
+                    if debug_trace_mode and trace_steps:
+                        trace_index = max(0, trace_index - 1)
+                elif event.key == pygame.K_RIGHT:
+                    if debug_trace_mode and trace_steps:
+                        trace_index = min(len(trace_steps) - 1, trace_index + 1)
                 elif event.key == pygame.K_s:
                     try:
                         with open("polygons.txt", "w") as f:
@@ -165,6 +195,23 @@ def main():
         # helper text
         draw_text(screen, "Left click: add vertex   Right click or Enter: close polygon   Backspace: undo   C: clear   S: save", (12, 12))
         draw_text(screen, f"Polygons: {len(polygons)}   Current vertices: {len(current)}", (12, 36))
+        draw_text(screen, "D: toggle PIP trace mode   LEFT/RIGHT: step trace", (12, 60))
+        if debug_trace_mode:
+            if trace_computing:
+                draw_text(screen, "Computing PIP trace...", (12, 84), color=(255, 180, 0))
+            elif trace_steps:
+                # draw the current traced polygon and triangle highlight
+                step = trace_steps[trace_index]
+                traced_poly = step.get("polygon", [])
+                if len(traced_poly) >= 3:
+                    pygame.draw.polygon(screen, (80, 80, 120), traced_poly)
+                    pygame.draw.polygon(screen, (180, 180, 220), traced_poly, width=2)
+                tri = step.get("triangle")
+                if tri:
+                    # highlight triangle in red-ish
+                    pygame.draw.polygon(screen, (200, 80, 80), tri)
+                    for v in tri:
+                        pygame.draw.circle(screen, (255, 120, 120), v, 5)
 
         pygame.display.flip()
         clock.tick(60)

@@ -210,3 +210,40 @@ def is_point_in_polygon_ray(point, polygon, eps=1e-9):
                 inside = not inside
 
     return inside
+
+
+def trace_concavity_removal(polygon):
+    """Return a list of states showing the concavity-removal process.
+
+    Each state is a dict with keys:
+      - 'polygon': list of vertices at this step (before removal)
+      - 'concavity_idx': index of the concave vertex found, or -1 if convex
+      - 'triangle': (optional) list of three vertices (prev, concave, next) tested
+
+    The sequence stops when the polygon becomes convex (concavity_idx == -1)
+    or fewer than 3 vertices remain.
+    """
+    current_poly = list(polygon)
+    trace = []
+
+    while len(current_poly) >= 3:
+        state = {"polygon": list(current_poly)}
+        concavity_idx = find_first_concavity(current_poly)
+        state["concavity_idx"] = concavity_idx
+
+        if concavity_idx == -1:
+            trace.append(state)
+            break
+
+        n = len(current_poly)
+        prev_idx = (concavity_idx - 1) % n
+        next_idx = (concavity_idx + 1) % n
+        triangle = [current_poly[prev_idx], current_poly[concavity_idx], current_poly[next_idx]]
+        state["triangle"] = triangle
+        trace.append(state)
+
+        # remove the concave vertex and continue
+        new_poly = [current_poly[i] for i in range(len(current_poly)) if i != concavity_idx]
+        current_poly = new_poly
+
+    return trace
