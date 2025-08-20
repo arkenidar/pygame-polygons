@@ -2,7 +2,7 @@ import pygame
 import sys
 import threading
 from typing import List, Tuple
-from polygon_point_pip import is_point_in_concave_polygon, is_point_in_polygon_ray, trace_concavity_removal
+from polygon_point_pip import is_point_in_concave_polygon, is_point_in_polygon_ray, trace_concavity_removal, trace_by_ear_clipping
 
 WIDTH, HEIGHT = 1000, 700
 BG_COLOR = (30, 30, 30)
@@ -62,12 +62,30 @@ def draw_filled_polygon_by_sampling(surface, polygon: List[Tuple[int, int]], col
     min_y = max(min(ys), 0)
     max_y = max(min(max(ys), surface.get_height() - 1), min_y)
 
-    # Access pixel-setting once per surface for speed
-    set_at = surface.set_at
+    # If polygon appears simple, attempt ear-clipping triangulation and draw
+    # triangles directly (guarantees simple intermediate geometry and is faster
+    # than per-pixel sampling). If ear-clipping fails (degenerate or
+    # self-intersecting polygon), fall back to robust per-pixel sampling using
+    # a ray-casting PIP test.
+    try:
+        trace = trace_by_ear_clipping(polygon)
+        # if trace produced any steps, extract triangles and draw them
+        if trace:
+            for step in trace:
+                tri = step.get("triangle")
+                if tri and len(tri) == 3:
+                    # draw filled triangle using pygame's polygon fill
+                    pygame.draw.polygon(surface, color, tri)
+            return
+    except Exception:
+        # fall back to sampling
+        pass
 
+    # fall back: per-pixel sampling using ray-casting PIP (robust for complex polygons)
+    set_at = surface.set_at
     for y in range(min_y, max_y + 1, sample_step):
         for x in range(min_x, max_x + 1, sample_step):
-            if is_point_in_concave_polygon((x, y), polygon):
+            if is_point_in_polygon_ray((x, y), polygon):
                 set_at((x, y), color)
 
 
