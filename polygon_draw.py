@@ -105,6 +105,9 @@ def main():
     use_research_pip_for_default = False
     trace_thread = None
     trace_computing = False
+    # fill mode: False => pygame.draw.polygon, True => sampled PIP fill
+    use_sampling_fill = False
+    sample_step = 1
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -164,6 +167,15 @@ def main():
                 elif event.key == pygame.K_r:
                     # toggle using the research PIP routine for testing the default polygon
                     use_research_pip_for_default = not use_research_pip_for_default
+                elif event.key == pygame.K_t:
+                    # toggle fill mode between pygame native polygon and sampled PIP
+                    use_sampling_fill = not use_sampling_fill
+                elif event.key in (pygame.K_PLUS, pygame.K_KP_PLUS, pygame.K_EQUALS):
+                    # decrease sample step to increase quality (min 1)
+                    sample_step = max(1, sample_step - 1)
+                elif event.key in (pygame.K_MINUS, pygame.K_KP_MINUS):
+                    # increase sample step to lower quality and speed up
+                    sample_step = sample_step + 1
 
         # draw
         screen.fill(BG_COLOR)
@@ -190,8 +202,12 @@ def main():
                 if inside:
                     fill_color = lighten_color(FILL_COLOR, factor=0.6)
 
-                # Use pygame's native polygon fill for speed and simplicity.
-                pygame.draw.polygon(screen, fill_color, poly)
+                if use_sampling_fill:
+                    # sampled PIP fill (slower but robust for complex polygons)
+                    draw_filled_polygon_by_sampling(screen, poly, fill_color, sample_step=sample_step)
+                else:
+                    # Use pygame's native polygon fill for speed and simplicity.
+                    pygame.draw.polygon(screen, fill_color, poly)
                 pygame.draw.polygon(screen, LINE_COLOR, poly, width=2)
 
         # current polygon: lines and points
@@ -206,6 +222,8 @@ def main():
         draw_text(screen, f"Polygons: {len(polygons)}   Current vertices: {len(current)}", (12, 36))
         draw_text(screen, "D: toggle PIP trace mode   LEFT/RIGHT: step trace   R: toggle research PIP for default", (12, 60))
         draw_text(screen, f"Research PIP for default: {'ON' if use_research_pip_for_default else 'OFF'}", (12, 84))
+        # show current fill mode and sampling step (draw before flip so it's visible)
+        draw_text(screen, f"Fill mode: {'sampling' if use_sampling_fill else 'pygame'}   sample_step={sample_step}", (12, 132))
         if debug_trace_mode:
             if trace_computing:
                 draw_text(screen, "Computing PIP trace...", (12, 108), color=(255, 180, 0))
