@@ -330,3 +330,135 @@ def trace_concavity_removal(polygon):
             break
 
     return trace
+
+
+def trace_by_ear_clipping(polygon):
+    """Produce a trace of ear removals for a simple polygon.
+
+    Each step is a dict: {'polygon': current_polygon, 'removed_idx': idx, 'triangle': [prev,curr,next]}
+    The routine assumes the input polygon is simple (non-self-intersecting). If the polygon
+    is not simple, the function will attempt to proceed but may return an incomplete trace.
+    This is intended as an offline analysis helper to validate and visualize safe removals.
+    """
+    from math import fabs
+
+    def _orient(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def _on_segment(a, b, p):
+        return min(a[0], b[0]) <= p[0] <= max(a[0], b[0]) and min(a[1], b[1]) <= p[1] <= max(a[1], b[1])
+
+    def segments_intersect(a1, a2, b1, b2):
+        o1 = _orient(a1, a2, b1)
+        o2 = _orient(a1, a2, b2)
+        o3 = _orient(b1, b2, a1)
+        o4 = _orient(b1, b2, a2)
+
+        if abs(o1) <= EPS and _on_segment(a1, a2, b1):
+            return True
+        if abs(o2) <= EPS and _on_segment(a1, a2, b2):
+            return True
+        if abs(o3) <= EPS and _on_segment(b1, b2, a1):
+            return True
+        if abs(o4) <= EPS and _on_segment(b1, b2, a2):
+            return True
+
+        if (o1 > 0 and o2 < 0 or o1 < 0 and o2 > 0) and (o3 > 0 and o4 < 0 or o3 < 0 and o4 > 0):
+            return True
+
+        return False
+
+    def polygon_has_self_intersections(poly):
+        n = len(poly)
+        if n < 4:
+            return False
+        for i in range(n):
+            a1 = poly[i]
+            a2 = poly[(i + 1) % n]
+            for j in range(i + 1, n):
+                # skip adjacent edges
+                if j == i:
+                    continue
+                if j == (i + 1) % n or i == (j + 1) % n:
+                    continue
+                b1 = poly[j]
+                b2 = poly[(j + 1) % n]
+                if segments_intersect(a1, a2, b1, b2):
+                    return True
+        return False
+
+    poly = list(polygon)
+    trace = []
+    # defensive: collapse exact duplicate consecutive vertices
+    def _cleanup(p):
+        out = []
+        for v in p:
+            if not out or out[-1] != v:
+                out.append(v)
+        # also remove last if equal to first
+        if len(out) > 1 and out[0] == out[-1]:
+            out.pop()
+        return out
+
+    poly = _cleanup(poly)
+
+    # quick reject if polygon too small
+    if len(poly) < 3:
+        return trace
+
+    # main loop
+    max_iters = len(poly) * 2 + 10
+    iters = 0
+    while len(poly) > 3 and iters < max_iters:
+        iters += 1
+        n = len(poly)
+        # compute orientation
+        area = 0.0
+        for i in range(n):
+            x1, y1 = poly[i]
+            x2, y2 = poly[(i + 1) % n]
+            area += (x1 * y2 - y1 * x2)
+        is_ccw = True if abs(area) <= EPS else (area > 0)
+
+        ear_found = False
+        for i in range(n):
+            prev = poly[(i - 1) % n]
+            curr = poly[i]
+            nxt = poly[(i + 1) % n]
+            # convexity test
+            cross = _orient(prev, curr, nxt)
+            if is_ccw:
+                if cross <= EPS:
+                    continue
+            else:
+                if cross >= -EPS:
+                    continue
+
+            # check no other vertex inside triangle prev-curr-next
+            contains_other = False
+            for j in range(n):
+                if j in ((i - 1) % n, i, (i + 1) % n):
+                    continue
+                p = poly[j]
+                if is_point_in_triangle(p, prev, curr, nxt):
+                    contains_other = True
+                    break
+            if contains_other:
+                continue
+
+            # this is an ear: record and remove curr
+            state = {"polygon": list(poly), "removed_idx": i, "triangle": [prev, curr, nxt]}
+            trace.append(state)
+            del poly[i]
+            ear_found = True
+            break
+
+        if not ear_found:
+            # could be numeric/degenerate; stop early
+            break
+
+    # append final triangle state if available
+    if len(poly) == 3:
+        trace.append({"polygon": list(poly), "removed_idx": -1, "triangle": [poly[0], poly[1], poly[2]]})
+
+    return trace
