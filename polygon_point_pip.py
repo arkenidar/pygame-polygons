@@ -225,25 +225,108 @@ def trace_concavity_removal(polygon):
     """
     current_poly = list(polygon)
     trace = []
+    def _orient(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
 
+    def _on_segment(a, b, p):
+        return min(a[0], b[0]) <= p[0] <= max(a[0], b[0]) and min(a[1], b[1]) <= p[1] <= max(a[1], b[1])
+
+    def segments_intersect(a1, a2, b1, b2):
+        o1 = _orient(a1, a2, b1)
+        o2 = _orient(a1, a2, b2)
+        o3 = _orient(b1, b2, a1)
+        o4 = _orient(b1, b2, a2)
+
+        # Check special cases: collinear and on-segment
+        if abs(o1) <= EPS and _on_segment(a1, a2, b1):
+            return True
+        if abs(o2) <= EPS and _on_segment(a1, a2, b2):
+            return True
+        if abs(o3) <= EPS and _on_segment(b1, b2, a1):
+            return True
+        if abs(o4) <= EPS and _on_segment(b1, b2, a2):
+            return True
+
+        if (o1 > 0 and o2 < 0 or o1 < 0 and o2 > 0) and (o3 > 0 and o4 < 0 or o3 < 0 and o4 > 0):
+            return True
+
+        return False
+
+    def polygon_self_intersections(poly):
+        n = len(poly)
+        if n < 4:
+            return []
+        intersections = []
+        for i in range(n):
+            a1 = poly[i]
+            a2 = poly[(i + 1) % n]
+            for j in range(i + 1, n):
+                # skip adjacent edges
+                if j == i:
+                    continue
+                if j == (i + 1) % n or i == (j + 1) % n:
+                    continue
+                b1 = poly[j]
+                b2 = poly[(j + 1) % n]
+                if segments_intersect(a1, a2, b1, b2):
+                    intersections.append((i, j))
+        return intersections
+
+    def is_vertex_concave(idx, poly, is_ccw):
+        n = len(poly)
+        prev = poly[(idx - 1) % n]
+        curr = poly[idx]
+        nxt = poly[(idx + 1) % n]
+        cross = cross_product(prev, curr, nxt)
+        if is_ccw:
+            return cross < -EPS
+        else:
+            return cross > EPS
+
+    # restart loop with safer removal strategy
     while len(current_poly) >= 3:
         state = {"polygon": list(current_poly)}
-        concavity_idx = find_first_concavity(current_poly)
-        state["concavity_idx"] = concavity_idx
 
-        if concavity_idx == -1:
+        # compute orientation
+        area = 0.0
+        for i in range(len(current_poly)):
+            x1, y1 = current_poly[i]
+            x2, y2 = current_poly[(i + 1) % len(current_poly)]
+            area += (x1 * y2 - y1 * x2)
+        is_ccw = True if abs(area) <= EPS else (area > 0)
+
+        # collect concave vertex indices
+        concave_indices = [i for i in range(len(current_poly)) if is_vertex_concave(i, current_poly, is_ccw)]
+
+        if not concave_indices:
+            state["concavity_idx"] = -1
             trace.append(state)
             break
 
-        n = len(current_poly)
-        prev_idx = (concavity_idx - 1) % n
-        next_idx = (concavity_idx + 1) % n
-        triangle = [current_poly[prev_idx], current_poly[concavity_idx], current_poly[next_idx]]
-        state["triangle"] = triangle
-        trace.append(state)
+        # try removing a concave vertex that does not create self-intersections
+        removed = False
+        for concavity_idx in concave_indices:
+            n = len(current_poly)
+            prev_idx = (concavity_idx - 1) % n
+            next_idx = (concavity_idx + 1) % n
+            triangle = [current_poly[prev_idx], current_poly[concavity_idx], current_poly[next_idx]]
+            state_try = {"polygon": list(current_poly), "concavity_idx": concavity_idx, "triangle": triangle}
 
-        # remove the concave vertex and continue
-        new_poly = [current_poly[i] for i in range(len(current_poly)) if i != concavity_idx]
-        current_poly = new_poly
+            # form new polygon with this vertex removed
+            new_poly = [current_poly[i] for i in range(len(current_poly)) if i != concavity_idx]
+            # if removal causes no self-intersection, accept it
+            if not polygon_self_intersections(new_poly):
+                trace.append(state_try)
+                current_poly = new_poly
+                removed = True
+                break
+            else:
+                # record that this attempted removal would self-intersect (skipped)
+                state_try["skipped"] = True
+                trace.append(state_try)
+
+        if not removed:
+            # cannot safely remove any concave vertex without creating self-intersection
+            break
 
     return trace
