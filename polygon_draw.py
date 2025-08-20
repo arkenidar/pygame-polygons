@@ -48,6 +48,19 @@ def draw_filled_polygon_by_sampling(surface, polygon: List[Tuple[int, int]], col
                 set_at((x, y), color)
 
 
+def lighten_color(color: Tuple[int, int, int], factor: float = 0.5) -> Tuple[int, int, int]:
+    """Return a lighter version of the given RGB color by blending toward white.
+
+    factor in [0,1]: 0 => original color, 1 => white
+    """
+    r, g, b = color
+    return (
+        min(255, int(r + (255 - r) * factor)),
+        min(255, int(g + (255 - g) * factor)),
+        min(255, int(b + (255 - b) * factor)),
+    )
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
@@ -95,12 +108,23 @@ def main():
         screen.fill(BG_COLOR)
 
         # draw filled polygons
+        mouse_pos = pygame.mouse.get_pos()
         for poly in polygons:
             if len(poly) >= 3:
                 # Use sampling-based fill when polygon area is small-to-medium.
                 # For very large polygons this is slow; sample_step can be
                 # increased to speed up the operation at the cost of quality.
-                draw_filled_polygon_by_sampling(screen, poly, FILL_COLOR, sample_step=1)
+                # If the mouse is inside this polygon, draw with a lighter fill.
+                try:
+                    inside = is_point_in_concave_polygon(mouse_pos, poly)
+                except Exception:
+                    inside = False
+
+                fill_color = FILL_COLOR
+                if inside:
+                    fill_color = lighten_color(FILL_COLOR, factor=0.6)
+
+                draw_filled_polygon_by_sampling(screen, poly, fill_color, sample_step=1)
                 pygame.draw.polygon(screen, LINE_COLOR, poly, width=2)
 
         # current polygon: lines and points
