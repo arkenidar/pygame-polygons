@@ -1,13 +1,35 @@
 import pygame
 import sys
 from typing import List, Tuple
-from polygon_point_pip import is_point_in_concave_polygon
+from polygon_point_pip import is_point_in_concave_polygon, is_point_in_polygon_ray
 
 WIDTH, HEIGHT = 1000, 700
 BG_COLOR = (30, 30, 30)
 POINT_COLOR = (255, 200, 50)
 LINE_COLOR = (200, 200, 200)
 FILL_COLOR = (50, 150, 220)
+
+# Default polygon (will be added as the first polygon on every app start)
+DEFAULT_POLYGON_STR = (
+    "334,262;210,352;302,406;640,403;602,273;464,294;420,363;490,356;"
+    "427,380;362,372;304,351;324,325;335,325;393,312;406,276;388,270;"
+    "372,282;337,297"
+)
+
+
+def parse_polygon_from_string(s: str):
+    """Parse a semicolon-separated list of x,y pairs into a list of tuples."""
+    pts = []
+    for part in s.split(";"):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            x_str, y_str = part.split(",")
+            pts.append((int(x_str), int(y_str)))
+        except Exception:
+            continue
+    return pts
 
 
 def draw_text(surface, text, pos, color=(220, 220, 220), font_size=18):
@@ -68,6 +90,10 @@ def main():
     clock = pygame.time.Clock()
 
     polygons: List[List[Tuple[int, int]]] = []
+    # ensure default test polygon is present first
+    default_poly = parse_polygon_from_string(DEFAULT_POLYGON_STR)
+    if default_poly:
+        polygons.append(default_poly)
     current: List[Tuple[int, int]] = []
 
     running = True
@@ -115,8 +141,9 @@ def main():
                 # For very large polygons this is slow; sample_step can be
                 # increased to speed up the operation at the cost of quality.
                 # If the mouse is inside this polygon, draw with a lighter fill.
+                # Use the ray-casting test which handles self-intersections
                 try:
-                    inside = is_point_in_concave_polygon(mouse_pos, poly)
+                    inside = is_point_in_polygon_ray(mouse_pos, poly)
                 except Exception:
                     inside = False
 

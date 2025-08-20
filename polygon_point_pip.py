@@ -178,3 +178,35 @@ if __name__ == "__main__":
     for point in test_points:
         result = is_point_in_concave_polygon(point, concave_polygon)
         print(f"Point {point} is {'inside' if result else 'outside'} the polygon")
+
+
+def is_point_in_polygon_ray(point, polygon, eps=1e-9):
+    """Even-odd (ray-casting) test that works for simple and self-intersecting polygons.
+
+    Returns True if point is inside or on boundary.
+    """
+    x, y = point
+    n = len(polygon)
+    if n < 3:
+        return False
+
+    inside = False
+    for i in range(n):
+        x1, y1 = polygon[i]
+        x2, y2 = polygon[(i + 1) % n]
+
+        # Check if point is exactly on the segment (inclusive boundary)
+        if min(x1, x2) - eps <= x <= max(x1, x2) + eps and min(y1, y2) - eps <= y <= max(y1, y2) + eps:
+            # cross product zero -> on the line
+            if abs((x2 - x1) * (y - y1) - (y2 - y1) * (x - x1)) <= eps:
+                return True
+
+        # Check if the horizontal ray intersects the edge
+        intersects = ((y1 > y) != (y2 > y))
+        if intersects:
+            # compute x coordinate of intersection of edge with horizontal line at y
+            xinters = x1 + (y - y1) * (x2 - x1) / (y2 - y1)
+            if xinters > x:
+                inside = not inside
+
+    return inside
