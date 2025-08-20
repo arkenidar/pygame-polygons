@@ -124,7 +124,8 @@ def main():
                 if inside:
                     fill_color = lighten_color(FILL_COLOR, factor=0.6)
 
-                draw_filled_polygon_by_sampling(screen, poly, fill_color, sample_step=1)
+                # Use pygame's native polygon fill for speed and simplicity.
+                pygame.draw.polygon(screen, fill_color, poly)
                 pygame.draw.polygon(screen, LINE_COLOR, poly, width=2)
 
         # current polygon: lines and points
