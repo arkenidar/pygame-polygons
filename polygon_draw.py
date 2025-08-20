@@ -101,6 +101,8 @@ def main():
     debug_trace_mode = False
     trace_steps = []
     trace_index = 0
+    # runtime toggle: when True, use the research PIP for the first/default polygon only
+    use_research_pip_for_default = False
     trace_thread = None
     trace_computing = False
     while running:
@@ -159,6 +161,9 @@ def main():
                         print("Saved polygons to polygons.txt")
                     except Exception as e:
                         print("Failed to save:", e)
+                elif event.key == pygame.K_r:
+                    # toggle using the research PIP routine for testing the default polygon
+                    use_research_pip_for_default = not use_research_pip_for_default
 
         # draw
         screen.fill(BG_COLOR)
@@ -172,8 +177,12 @@ def main():
                 # increased to speed up the operation at the cost of quality.
                 # If the mouse is inside this polygon, draw with a lighter fill.
                 # Use the ray-casting test which handles self-intersections
+                # For the first polygon, optionally use the research PIP routine
                 try:
-                    inside = is_point_in_polygon_ray(mouse_pos, poly)
+                    if use_research_pip_for_default and polygons.index(poly) == 0:
+                        inside = is_point_in_concave_polygon(mouse_pos, poly)
+                    else:
+                        inside = is_point_in_polygon_ray(mouse_pos, poly)
                 except Exception:
                     inside = False
 
@@ -195,10 +204,11 @@ def main():
         # helper text
         draw_text(screen, "Left click: add vertex   Right click or Enter: close polygon   Backspace: undo   C: clear   S: save", (12, 12))
         draw_text(screen, f"Polygons: {len(polygons)}   Current vertices: {len(current)}", (12, 36))
-        draw_text(screen, "D: toggle PIP trace mode   LEFT/RIGHT: step trace", (12, 60))
+        draw_text(screen, "D: toggle PIP trace mode   LEFT/RIGHT: step trace   R: toggle research PIP for default", (12, 60))
+        draw_text(screen, f"Research PIP for default: {'ON' if use_research_pip_for_default else 'OFF'}", (12, 84))
         if debug_trace_mode:
             if trace_computing:
-                draw_text(screen, "Computing PIP trace...", (12, 84), color=(255, 180, 0))
+                draw_text(screen, "Computing PIP trace...", (12, 108), color=(255, 180, 0))
             elif trace_steps:
                 # draw the current traced polygon and triangle highlight
                 step = trace_steps[trace_index]
